@@ -19,6 +19,9 @@ env:
 jobs:
   build:
     runs-on: ubuntu-22.04
+    # 显式声明权限，配合仓库设置使用
+    permissions:
+      contents: write
 
     steps:
     - name: Checkout
@@ -28,24 +31,17 @@ jobs:
       env:
         DEBIAN_FRONTEND: noninteractive
       run: |
-        # 1. 极致清理磁盘空间（扩充清理项）
         sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL /usr/local/share/boost /usr/lib/jvm /usr/local/lib/node_modules
         sudo docker image prune --all --force
-        
-        # 2. 增加 4GB Swap 防止 Go 语言编译器（Sing-box核心）OOM 崩溃
         sudo fallocate -l 4G /swapfile
         sudo chmod 600 /swapfile
         sudo mkswap /swapfile
         sudo swapon /swapfile
-
-        # 3. 安装必要依赖
         sudo -E apt-get -qq update
         sudo -E apt-get -qq install ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential bzip2 ccache cmake cpio curl device-tree-compiler fastjar flex gawk gettext gcc-multilib g++-multilib git gperf haveged help2man intltool libc6-dev-i386 libelf-dev libfuse-dev libglib2.0-dev libgmp3-dev libltdl-dev libmpc-dev libmpfr-dev libncurses5-dev libncursesw5-dev libpython3-dev libreadline-dev libssl-dev libtool lrzsz mkisofs msmtp ninja-build p7zip p7zip-full patch pkgconf python2.7 python3 python3-pyelftools python3-setuptools qemu-utils rsync scons squashfs-tools subversion swig texinfo uglifyjs upx-ucl unzip vim wget xmlto xxd zlib1g-dev
         sudo -E apt-get -qq autoremove --purge
         sudo -E apt-get -qq clean
         sudo timedatectl set-timezone "$TZ"
-        
-        # 使用 /mnt 目录（Actions 中空间最大的分区）作为工作区
         sudo mkdir -p /mnt/workdir
         sudo chown $USER:$GROUPS /mnt/workdir
         ln -sf /mnt/workdir $GITHUB_WORKSPACE/workdir
@@ -77,14 +73,20 @@ jobs:
         cd openwrt
         $GITHUB_WORKSPACE/$DIY_P2_SH
         
-        # 4. 深度优化：针对 K2P (32MB) 和 Sing-box 进行配置强制修正
-        # 强制删除 V2ray/Xray 以免撑爆磁盘，确保方案 B (Sing-box) 唯一性
+        # --- 极致瘦身逻辑 ---
+        # 1. 强制关闭非路由器镜像（这是 221MB 变成 30MB 的关键）
+        sed -i 's/CONFIG_TARGET_ROOTFS_EXT4FS=y/# CONFIG_TARGET_ROOTFS_EXT4FS is not set/' .config
+        sed -i 's/CONFIG_TARGET_ROOTFS_TARGZ=y/# CONFIG_TARGET_ROOTFS_TARGZ is not set/' .config
+        sed -i 's/CONFIG_TARGET_IMAGES_GZ=y/# CONFIG_TARGET_IMAGES_GZ is not set/' .config
+        sed -i 's/CONFIG_TARGET_VNMWARE=y/# CONFIG_TARGET_VNMWARE is not set/' .config
+        
+        # 2. 方案 B：强制 Sing-box 唯一化并剔除大资源包
         sed -i 's/CONFIG_PACKAGE_luci-app-passwall_INCLUDE_V2ray_Core=y/# CONFIG_PACKAGE_luci-app-passwall_INCLUDE_V2ray_Core is not set/' .config
         sed -i 's/CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Xray_Core=y/# CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Xray_Core is not set/' .config
         sed -i 's/CONFIG_PACKAGE_luci-app-passwall_INCLUDE_V2ray_Geodata=y/# CONFIG_PACKAGE_luci-app-passwall_INCLUDE_V2ray_Geodata is not set/' .config
         echo "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Sing_Box=y" >> .config
         
-        # 开启二进制压缩
+        # 3. 开启二进制极致压缩
         echo "CONFIG_STRIP_KERNEL_EXPORTS=y" >> .config
         echo "CONFIG_USE_STRIP=y" >> .config
         echo "CONFIG_USE_SSTRIP=y" >> .config
@@ -104,23 +106,19 @@ jobs:
       run: |
         cd openwrt
         echo -e "$(nproc) thread compile"
-        # 优先多线程，失败则单线程输出详细日志
         make -j$(nproc) || make -j1 || make -j1 V=s
         echo "status=success" >> $GITHUB_OUTPUT
         grep '^CONFIG_TARGET.*DEVICE.*=y' .config | sed -r 's/.*DEVICE_(.*)=y/\1/' > DEVICE_NAME
         [ -s DEVICE_NAME ] && echo "DEVICE_NAME=_$(cat DEVICE_NAME)" >> $GITHUB_ENV
         echo "FILE_DATE=_$(date +"%Y%m%d%H%M")" >> $GITHUB_ENV
 
-    - name: Check space usage
-      if: (!cancelled())
-      run: df -hT
-
     - name: Organize files
       id: organize
       if: env.UPLOAD_FIRMWARE == 'true' && !cancelled()
       run: |
         cd openwrt/bin/targets/*/*
-        rm -rf packages
+        # 进一步删除无用的大文件，只保留 .bin 固件
+        rm -rf packages *.buildinfo *.manifest *.json *.vmdk *.img.gz
         echo "FIRMWARE=$PWD" >> $GITHUB_ENV
         echo "status=success" >> $GITHUB_OUTPUT
 
@@ -137,19 +135,19 @@ jobs:
       run: |
         echo "release_tag=$(date +"%Y.%m.%d-%H%M")" >> $GITHUB_OUTPUT
         touch release.txt
-        echo "🚀 OpenWrt 固件发布" >> release.txt
-        echo "设备名: ${{ env.DEVICE_NAME }}" >> release.txt
+        echo "🚀 K2P 精简版固件" >> release.txt
+        echo "注意：请核对固件大小，超过 30MB 慎刷！" >> release.txt
         echo "status=success" >> $GITHUB_OUTPUT
 
     - name: Upload firmware to release
       uses: softprops/action-gh-release@master
       if: steps.tag.outputs.status == 'success' && !cancelled()
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
         tag_name: ${{ steps.tag.outputs.release_tag }}
         body_path: release.txt
         files: ${{ env.FIRMWARE }}/*
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Delete workflow runs
       uses: Mattraks/delete-workflow-runs@main
