@@ -72,7 +72,25 @@ jobs:
         chmod +x $DIY_P2_SH
         cd openwrt
         $GITHUB_WORKSPACE/$DIY_P2_SH
+        # 强制修正架构为 K2P，防止默认编译成 x86
+        sed -i 's/CONFIG_TARGET_x86=y/# CONFIG_TARGET_x86 is not set/' .config
+        sed -i 's/CONFIG_TARGET_x86_64=y/# CONFIG_TARGET_x86_64 is not set/' .config
+        echo "CONFIG_TARGET_ramips=y" >> .config
+        echo "CONFIG_TARGET_ramips_mt7621=y" >> .config
+        echo "CONFIG_TARGET_ramips_mt7621_DEVICE_phicomm_k2p=y" >> .config
         
+        # 强制开启 Sing-box (方案 B) 并剔除臃肿核心
+        sed -i 's/CONFIG_PACKAGE_luci-app-passwall_INCLUDE_V2ray_Core=y/# CONFIG_PACKAGE_luci-app-passwall_INCLUDE_V2ray_Core is not set/' .config
+        sed -i 's/CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Xray_Core=y/# CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Xray_Core is not set/' .config
+        echo "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Sing_Box=y" >> .config
+
+        # 极致瘦身：只保留 squashfs 固件，关闭所有 x86 镜像
+        sed -i 's/CONFIG_TARGET_ROOTFS_EXT4FS=y/# CONFIG_TARGET_ROOTFS_EXT4FS is not set/' .config
+        sed -i 's/CONFIG_TARGET_IMAGES_GZ=y/# CONFIG_TARGET_IMAGES_GZ is not set/' .config
+        
+        # 开启压缩
+        echo "CONFIG_USE_SSTRIP=y" >> .config
+        echo "CONFIG_SING_BOX_COMPRESS_UPX=y" >> .config
         # --- 极致瘦身逻辑 ---
         # 1. 强制关闭非路由器镜像（这是 221MB 变成 30MB 的关键）
         sed -i 's/CONFIG_TARGET_ROOTFS_EXT4FS=y/# CONFIG_TARGET_ROOTFS_EXT4FS is not set/' .config
