@@ -72,35 +72,15 @@ jobs:
         chmod +x $DIY_P2_SH
         cd openwrt
         $GITHUB_WORKSPACE/$DIY_P2_SH
-
-        # 1. 强制纠正硬件架构为 K2P (ramips/mt7621)
-        sed -i 's/CONFIG_TARGET_x86=y/# CONFIG_TARGET_x86 is not set/' .config
-        sed -i 's/CONFIG_TARGET_x86_64=y/# CONFIG_TARGET_x86_64 is not set/' .config
-        echo "CONFIG_TARGET_ramips=y" >> .config
-        echo "CONFIG_TARGET_ramips_mt7621=y" >> .config
-        echo "CONFIG_TARGET_ramips_mt7621_DEVICE_phicomm_k2p=y" >> .config
-
-        # 2. 核心功能勾选：保留 V2ray + 加入最新 Sing-box & Geoview
+        
+        # 强制开启 Sing-box、V2ray 及 Geoview
         echo "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Sing_Box=y" >> .config
         echo "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_V2ray_Core=y" >> .config
         echo "CONFIG_PACKAGE_geoview=y" >> .config
-        echo "CONFIG_PACKAGE_sing-box=y" >> .config
-        echo "CONFIG_PACKAGE_v2ray-core=y" >> .config
         
-        # 3. 极致瘦身与压缩 (这是 K2P 能装下双核心的唯一办法)
+        # 开启二进制极致压缩 (K2P 必须项)
         echo "CONFIG_SING_BOX_COMPRESS_UPX=y" >> .config
         echo "CONFIG_V2RAY_COMPRESS_UPX=y" >> .config
         echo "CONFIG_GEOVIEW_COMPRESS_UPX=y" >> .config
-        echo "CONFIG_STRIP_KERNEL_EXPORTS=y" >> .config
         echo "CONFIG_USE_STRIP=y" >> .config
         echo "CONFIG_USE_SSTRIP=y" >> .config
-
-        # 4. 剔除多余镜像和 Xray (腾出 32MB 空间)
-        sed -i 's/CONFIG_TARGET_ROOTFS_EXT4FS=y/# CONFIG_TARGET_ROOTFS_EXT4FS is not set/' .config
-        sed -i 's/CONFIG_TARGET_IMAGES_GZ=y/# CONFIG_TARGET_IMAGES_GZ is not set/' .config
-        sed -i 's/CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Xray_Core=y/# CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Xray_Core is not set/' .config
-        
-        # 5. 修改默认 SSID 为 PDCN 并集成基础 LuCI
-        sed -i 's/OpenWrt/PDCN/g' package/base-files/files/bin/config_generate
-        echo "CONFIG_PACKAGE_luci=y" >> .config
-        echo "CONFIG_PACKAGE_luci-theme-bootstrap=y" >> .config
