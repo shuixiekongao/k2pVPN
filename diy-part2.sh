@@ -20,3 +20,7 @@ sed -i 's/CONFIG_PACKAGE_luci-app-passwall_INCLUDE_V2ray_Core=y/# CONFIG_PACKAGE
 
 # 4. 修改默认 SSID 为 PDCN (确保无线能搜到)
 sed -i 's/OpenWrt/PDCN/g' package/base-files/files/bin/config_generate
+
+# 5. 强制集成 LuCI 界面，防止出现 Nginx 欢迎页
+echo "CONFIG_PACKAGE_luci=y" >> .config
+echo "CONFIG_PACKAGE_luci-theme-bootstrap=y" >> .config
