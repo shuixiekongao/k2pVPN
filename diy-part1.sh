@@ -1,7 +1,7 @@
 #!/bin/bash
-# 添加 helloworld 源 (可选)
-echo 'src-git helloworld https://github.com/fw876/helloworld' >>feeds.conf.default
+# 移除旧版核心
+rm -rf feeds/packages/net/{xray-core,v2ray-geodata,sing-box,chinadns-ng,geoview,hysteria,v2ray-plugin,xray-plugin}
 
-# 【关键】取消注释并添加 PassWall 源及其依赖包源
-echo 'src-git passwall_packages https://github.com/xiaorouji/openwrt-passwall-packages' >>feeds.conf.default
-echo 'src-git passwall https://github.com/xiaorouji/openwrt-passwall' >>feeds.conf.default
+# 克隆最新依赖包和 LuCI 界面
+git clone https://github.com/Openwrt-Passwall/openwrt-passwall-packages package/passwall-packages
+git clone https://github.com/Openwrt-Passwall/openwrt-passwall package/passwall-luci
