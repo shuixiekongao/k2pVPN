@@ -1,26 +1,23 @@
 #!/bin/bash
-# 1. 强制纠正硬件架构
+
+# 1. 修改 DTS 分区定义 (将 firmware 分区从 16MB 扩展至 32MB)
+# 这一步是让内核知道闪存有 32MB 空间
+sed -i 's/<0x50000 0xfb0000>/<0x50000 0x1fb0000>/g' target/linux/ramips/dts/mt7621_phicomm_k2p.dts
+
+# 2. 修改 Image Makefile (解除编译时的体积检查限制)
+# 这一步是防止出现 "Image too big" 错误而导致不生成 bin 文件
+# 针对不同版本的 LEDE/OpenWrt 源码，尝试匹配多种可能的原始数值
+sed -i 's/IMAGE_SIZE := 16064k/IMAGE_SIZE := 32448k/g' target/linux/ramips/image/mt7621.mk
+sed -i 's/IMAGE_SIZE := 16128k/IMAGE_SIZE := 32448k/g' target/linux/ramips/image/mt7621.mk
+sed -i 's/IMAGE_SIZE := 15872k/IMAGE_SIZE := 32448k/g' target/linux/ramips/image/mt7621.mk
+
+# 3. 极致瘦身：剔除无用大文件，确保编译能通过
+# 即使扩容了，也建议开启 UPX 压缩，否则系统运行会很卡
+echo "CONFIG_SING_BOX_COMPRESS_UPX=y" >> .config
+echo "CONFIG_V2RAY_COMPRESS_UPX=y" >> .config
+echo "CONFIG_GEOVIEW_COMPRESS_UPX=y" >> .config
+
+# 4. 再次确认架构锁定
 echo "CONFIG_TARGET_ramips=y" >> .config
 echo "CONFIG_TARGET_ramips_mt7621=y" >> .config
 echo "CONFIG_TARGET_ramips_mt7621_DEVICE_phicomm_k2p=y" >> .config
-
-# 2. 强制开启 Sing-box 并启用极致压缩 (UPX)
-echo "CONFIG_PACKAGE_luci-app-passwall=y" >> .config
-echo "CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Sing_Box=y" >> .config
-echo "CONFIG_PACKAGE_sing-box=y" >> .config
-echo "CONFIG_SING_BOX_COMPRESS_UPX=y" >> .config
-
-# 3. 删掉占空间的“累赘”，保住 32MB 闪存底线
-sed -i 's/CONFIG_PACKAGE_luci-app-docker=y/# CONFIG_PACKAGE_luci-app-docker is not set/' .config
-sed -i 's/CONFIG_PACKAGE_luci-app-v2ray-server=y/# CONFIG_PACKAGE_luci-app-v2ray-server is not set/' .config
-sed -i 's/CONFIG_PACKAGE_luci-app-ssr-native=y/# CONFIG_PACKAGE_luci-app-ssr-native is not set/' .config
-# 移除所有 Xray/V2ray 核心，只留 Sing-box
-sed -i 's/CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Xray_Core=y/# CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Xray_Core is not set/' .config
-sed -i 's/CONFIG_PACKAGE_luci-app-passwall_INCLUDE_V2ray_Core=y/# CONFIG_PACKAGE_luci-app-passwall_INCLUDE_V2ray_Core is not set/' .config
-
-# 4. 修改默认 SSID 为 PDCN (确保无线能搜到)
-sed -i 's/OpenWrt/PDCN/g' package/base-files/files/bin/config_generate
-
-# 5. 强制集成 LuCI 界面，防止出现 Nginx 欢迎页
-echo "CONFIG_PACKAGE_luci=y" >> .config
-echo "CONFIG_PACKAGE_luci-theme-bootstrap=y" >> .config
